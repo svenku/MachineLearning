@@ -1,0 +1,91 @@
+---
+title: "Coursera Practical Machine Learning Course Project"
+author: "Sven Kunsing"
+date: "12/23/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Human activity recognition model
+
+In this analysis my aim is to train a prediction model to recognise the class of human activity based on the accelerometer readings recorded from these activities. Various people were asked to perform barbell lifts correctly and incorrectly in 5 different ways, coded by 'classe' variable (taking single character values 'A' to 'E') and while performing these activities, accelerometer readings were recorded.
+
+To start, let us load the training and testing data and necessary packages, also set seed for reproducibility of the analysis:
+
+```{r load, message=FALSE, warning=FALSE}
+train <- read.table('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv', header = T, sep = ',', na.strings=c("", "NA"), stringsAsFactors = F)
+test <- read.table('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv', header = T, sep = ',', na.strings=c("", "NA"), stringsAsFactors = F)
+
+require(tidyverse)
+require(caret)
+set.seed(42)
+```
+
+## Explore and clean the data
+
+Let's check train and test set dimensions and missing values
+
+```{r explore_data}
+dim(train)
+dim(test)
+```
+
+There seem to be some columns in train data that include exactly 19216 (almost 98%) missing values. Other columns seem to have no missing valuesat all. We will remove the columns with predominantly missing values from the training data, because they will hardly bring any value in the training process.
+
+```{r missing_data}
+unique(colSums(is.na(train)))
+```
+
+Let's get names of respective columns in order to drop them from training data. Also let us drop 7 first columns from training data, which seem to hold metadata for measurements (index, user data, timestamp etc) of the accelerometer readings, rather than readings themselves, which we intend to use for modelling.
+
+```{r clean_data}
+cols_to_drop <- train %>% 
+  select_if(~ any(is.na(.))) %>% 
+  names()
+
+# add 7 first columns
+cols_to_drop <- c(head(names(train),7), cols_to_drop)
+
+# drop the unnecessary columns
+train <- train %>%
+  select(-one_of(cols_to_drop))
+
+```
+
+## Fitting the random forest model
+
+Next, let's fit the random forest model using 5-fold cross-validation and print out the trained model summary. We use random forest as one of the best classification algorithms. We will use cross-validation in order to get a better estimate of out of sample error. Running the next code chunk takes some 11 minutes on an 8th gen Core i7 laptop.
+
+```{r fitting, cache=TRUE}
+control = trainControl(method = "cv", 
+                       number = 5, 
+                       verboseIter = FALSE)
+
+model_rf <- train(classe ~ .,
+                  data = train,
+                  method = "rf", 
+                  trControl = control)
+print(model_rf)
+
+```
+
+### Training result: 
+
+As can be seen from the model summary printout, the accuracy of the best model's crossvalidated accuracy metric was a very high 99.4%. This means that expected out of sample error rate is at least 0.6%.  Let's also have a look at the most important variables of the model:
+
+```{r variables}
+print(varImp(model_rf))
+  
+```
+
+### Use the model to predict classes in out of sample data
+
+Finally, let us use the model to create the predictions for the test data to be used in answering the quiz.
+
+```{r answer_quiz}
+print(data.frame(test_case_no = test$X, predicted_classe = predict(model_rf, test)))
+  
+```
